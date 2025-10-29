@@ -1,59 +1,203 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+## Dwiprasetia API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+RESTful API for a personal blog platform with public content, user interactions, and an admin CMS. Built on Laravel 12 with Sanctum authentication.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Requirements
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- PHP 8.2+
+- Composer
+- Node.js 18+ (for asset build, optional during API-only work)
+- PostgreSQL (default connection)
+- PHP extensions: openssl, pdo_pgsql, mbstring, tokenizer, xml, ctype, json, fileinfo
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## 1. Setup
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+```bash
+cp .env.example .env          # or configure your own
+composer install
+php artisan key:generate
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+# adjust DB_* values in .env to point at your Postgres instance
 
-## Laravel Sponsors
+php artisan migrate           # runs all tables, including sessions/personal tokens
+php artisan storage:link      # allows serving uploaded images
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Optional development assets:
 
-### Premium Partners
+```bash
+npm install
+npm run dev
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+---
 
-## Contributing
+## 2. Seeding an Admin
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+All new accounts default to role `user`. Promote an account manually (replace the ID/email as needed):
 
-## Code of Conduct
+```bash
+php artisan tinker
+>>> $user = \App\Models\User::where('email', 'admin@example.com')->first();
+>>> $user->role = 'admin';
+>>> $user->save();
+>>> exit
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+## 3. Authentication Flow (Bearer Tokens)
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+1. Register or login to receive a Sanctum plain-text token.
 
-## License
+   ```http
+   POST /api/v1/auth/register
+   {
+     "name": "Jane Doe",
+     "email": "jane@example.com",
+     "password": "secret123",
+     "password_confirmation": "secret123",
+     "bio": "Optional"
+   }
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+   POST /api/v1/auth/login
+   {
+     "email": "jane@example.com",
+     "password": "secret123"
+   }
+   ```
+
+2. Store the returned `token` on the client.
+3. Send it with subsequent requests:
+
+   ```
+   Authorization: Bearer <token>
+   Accept: application/json
+   ```
+
+4. `POST /api/v1/auth/logout` invalidates the current token.
+
+Cookie-based Sanctum SPA mode is disabled by default; use bearer tokens for integrations.
+
+---
+
+## 4. Core Features
+
+### Public
+
+- View published posts with author, like count, comment count.
+- View nested comments (visible status only).
+- Submit contact messages.
+- Read site settings (name, logo, about).
+
+### Authenticated User
+
+- Update profile (name, email, password, bio, avatar upload).
+- Comment and reply on posts, edit/delete own comments.
+- Report inappropriate comments.
+- Like posts (idempotent).
+- Save/bookmark posts.
+- View own saved posts list.
+
+### Admin
+
+- Full post CRUD, including draft status and featured image uploads.
+- Review comment reports (mark pending/reviewed/dismissed, hide/restore comment).
+- View dashboard stats and recent posts snapshot.
+- Manage site settings (name, about, logo upload).
+- Review and delete contact messages.
+
+---
+
+## 5. API Endpoints
+
+| Method | URL | Auth | Description |
+|--------|-----|------|-------------|
+| POST | `/api/v1/auth/register` | Public | Register new user and return token |
+| POST | `/api/v1/auth/login` | Public | Login and return token |
+| POST | `/api/v1/auth/logout` | Bearer | Revoke current token |
+| GET | `/api/v1/auth/me` | Bearer | Fetch current user |
+| GET | `/api/v1/profile` | Bearer | Profile details |
+| PUT/PATCH | `/api/v1/profile` | Bearer | Update profile (supports avatar upload) |
+| GET | `/api/v1/posts` | Optional | List posts (admins can filter status/drafts) |
+| GET | `/api/v1/posts/{post}` | Optional | Single post (drafts admin-only) |
+| POST | `/api/v1/posts` | Admin | Create post |
+| PUT/PATCH | `/api/v1/posts/{post}` | Admin | Update post |
+| DELETE | `/api/v1/posts/{post}` | Admin | Delete post |
+| GET | `/api/v1/posts/{post}/comments` | Optional | Paginated top-level comments with replies |
+| POST | `/api/v1/posts/{post}/comments` | Bearer | Create comment or reply |
+| PATCH | `/api/v1/comments/{comment}` | Bearer | Update comment (owner/admin) |
+| DELETE | `/api/v1/comments/{comment}` | Bearer | Delete comment (owner/admin) |
+| POST | `/api/v1/comments/{comment}/report` | Bearer | Report comment |
+| GET | `/api/v1/admin/comment-reports` | Admin | List reports |
+| PATCH | `/api/v1/admin/comment-reports/{report}` | Admin | Update report status and moderate |
+| POST | `/api/v1/posts/{post}/like` | Bearer | Like post |
+| DELETE | `/api/v1/posts/{post}/like` | Bearer | Unlike post |
+| POST | `/api/v1/posts/{post}/save` | Bearer | Bookmark post |
+| DELETE | `/api/v1/posts/{post}/save` | Bearer | Remove bookmark |
+| GET | `/api/v1/me/saved-posts` | Bearer | View saved posts |
+| POST | `/api/v1/messages` | Public | Submit contact form |
+| GET | `/api/v1/admin/messages` | Admin | List contact messages |
+| GET | `/api/v1/admin/messages/{message}` | Admin | View message detail |
+| DELETE | `/api/v1/admin/messages/{message}` | Admin | Delete message |
+| GET | `/api/v1/settings` | Public | Retrieve site settings |
+| PUT | `/api/v1/settings` | Admin | Update settings (name/about/logo) |
+| GET | `/api/v1/admin/dashboard` | Admin | Summary metrics and recent posts |
+
+> All file upload endpoints expect multipart/form-data with the relevant file field (`avatar`, `featured_image`, `site_logo`).
+
+---
+
+## 6. Postman Tips
+
+- Send `Accept: application/json` to ensure JSON responses.
+- Clear cookies for `127.0.0.1` if you ever see HTML responses; HTML indicates the request hit a web route.
+- Use Postman tests to persist bearer tokens:
+
+  ```js
+  const data = pm.response.json();
+  if (data.token) {
+    pm.collectionVariables.set('apiToken', data.token);
+  }
+  ```
+
+  Then set `Authorization: Bearer {{apiToken}}` on protected requests.
+
+---
+
+## 7. Storage & File Management
+
+- Uploaded avatars → `storage/app/public/avatars`
+- Post images → `storage/app/public/posts`
+- Site logo → `storage/app/public/settings`
+- Run `php artisan storage:link` so `/storage/...` URLs in responses resolve.
+- Old files are deleted automatically when replaced.
+
+---
+
+## 8. Testing
+
+```bash
+php artisan test
+```
+
+Add feature tests under `tests/Feature` to cover key workflows (auth, posts, comments, admin actions).
+
+---
+
+## 9. Troubleshooting
+
+- **401 Unauthorized:** Missing/invalid bearer token. Login again and update `Authorization` header.
+- **405 on `/api/v1/auth/me`:** Request redirected to `/login` because token header absent. Include bearer token and `Accept: application/json`.
+- **HTML error page:** API request missing `Accept: application/json`; Laravel returns the debug HTML view.
+- **`relation "sessions" does not exist`:** Run `php artisan migrate`; we provide a migration for the sessions table.
+
+---
+
+## 10. License
+
+This project inherits the Laravel MIT license. You may adapt and redistribute with attribution.
