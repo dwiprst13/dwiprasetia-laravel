@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SavedPostController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\UserManagementController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use App\Models\User;
@@ -81,5 +83,15 @@ Route::prefix('v1')->group(function () {
         Route::get('admin/messages', [MessageController::class, 'index']);
         Route::get('admin/messages/{message}', [MessageController::class, 'show']);
         Route::delete('admin/messages/{message}', [MessageController::class, 'destroy']);
+
+        Route::get('admin/users', [UserManagementController::class, 'index']);
+        Route::get('admin/users/{user}', [UserManagementController::class, 'show']);
+        Route::match(['put', 'patch'], 'admin/users/{user}', [UserManagementController::class, 'update']);
+
+        Route::get('admin/media', [MediaController::class, 'index']);
+        Route::post('admin/media', [MediaController::class, 'store']);
+        Route::get('admin/media/{media}', [MediaController::class, 'show']);
+        Route::match(['put', 'patch'], 'admin/media/{media}', [MediaController::class, 'update']);
+        Route::delete('admin/media/{media}', [MediaController::class, 'destroy']);
     });
 });

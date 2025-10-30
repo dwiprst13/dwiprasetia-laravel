@@ -10,6 +10,7 @@ use App\Models\Post;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class PostController extends Controller
 {
@@ -19,12 +20,23 @@ class PostController extends Controller
             ->with('author')
             ->withCount(['likes', 'comments']);
 
-        $user = $request->user();
+        $user = $request->user('sanctum') ?? $request->user();
+        $status = $request->input('status');
 
-        if (! $user || ! $user->isAdmin()) {
+        if ($user && $user->isAdmin()) {
+            if ($status) {
+                if (! in_array($status, ['published', 'draft', 'all'], true)) {
+                    throw ValidationException::withMessages([
+                        'status' => 'Status filter must be all, published, or draft.',
+                    ]);
+                }
+
+                if ($status !== 'all') {
+                    $query->where('status', $status);
+                }
+            }
+        } else {
             $query->where('status', 'published');
-        } elseif ($status = $request->input('status')) {
-            $query->where('status', $status);
         }
 
         if ($search = $request->input('search')) {
@@ -65,7 +77,9 @@ class PostController extends Controller
 
     public function show(Request $request, Post $post)
     {
-        if ($post->status !== 'published' && (! $request->user() || ! $request->user()->isAdmin())) {
+        $user = $request->user('sanctum') ?? $request->user();
+
+        if ($post->status !== 'published' && (! $user || ! $user->isAdmin())) {
             abort(404);
         }
 

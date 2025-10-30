@@ -110,6 +110,8 @@ Cookie-based Sanctum SPA mode is disabled by default; use bearer tokens for inte
 - View dashboard stats and recent posts snapshot.
 - Manage site settings (name, about, logo upload).
 - Review and delete contact messages.
+- Manage user accounts (list & update roles/details).
+- Manage media library for reusable images.
 
 ---
 
@@ -147,8 +149,20 @@ Cookie-based Sanctum SPA mode is disabled by default; use bearer tokens for inte
 | GET | `/api/v1/settings` | Public | Retrieve site settings |
 | PUT | `/api/v1/settings` | Admin | Update settings (name/about/logo) |
 | GET | `/api/v1/admin/dashboard` | Admin | Summary metrics and recent posts |
+| GET | `/api/v1/admin/users` | Admin | List users with filters |
+| GET | `/api/v1/admin/users/{user}` | Admin | View user detail |
+| PUT/PATCH | `/api/v1/admin/users/{user}` | Admin | Update user (profile fields & role) |
+| GET | `/api/v1/admin/media` | Admin | List media assets (supports `search`, `user_id`, `mime`, `per_page`) |
+| POST | `/api/v1/admin/media` | Admin | Upload image (`file`, optional `alt_text`, `caption`) |
+| GET | `/api/v1/admin/media/{media}` | Admin | View media detail |
+| PUT/PATCH | `/api/v1/admin/media/{media}` | Admin | Update metadata or replace file |
+| DELETE | `/api/v1/admin/media/{media}` | Admin | Delete media and underlying file |
 
-> All file upload endpoints expect multipart/form-data with the relevant file field (`avatar`, `featured_image`, `site_logo`).
+> All file upload endpoints expect multipart/form-data with the relevant file field (`avatar`, `featured_image`, `site_logo`, `file`).
+
+> Admin post listing supports `status=published|draft|all` to filter dashboard views.
+
+Media assets are stored on the `public` disk under `storage/app/public/media`. Run `php artisan storage:link` once so the generated URLs resolve.
 
 ---
 
