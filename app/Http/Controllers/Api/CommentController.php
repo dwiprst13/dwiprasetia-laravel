@@ -47,12 +47,6 @@ class CommentController extends Controller
     {
         $data = $request->validated();
 
-        if (! $post->allow_comments) {
-            throw ValidationException::withMessages([
-                'post_id' => 'Comments are disabled for this post.',
-            ]);
-        }
-
         if (! empty($data['parent_id'])) {
             $parentExists = Comment::where('id', $data['parent_id'])
                 ->where('post_id', $post->id)
@@ -70,10 +64,6 @@ class CommentController extends Controller
             'parent_id' => $data['parent_id'] ?? null,
             'body' => $data['body'],
         ]);
-
-        $post->forceFill([
-            'comment_count' => $post->comments()->count(),
-        ])->saveQuietly();
 
         $comment->load(['author', 'replies']);
 
@@ -103,10 +93,6 @@ class CommentController extends Controller
         }
 
         $comment->delete();
-
-        $comment->post->forceFill([
-            'comment_count' => $comment->post->comments()->count(),
-        ])->saveQuietly();
 
         return response()->json([
             'message' => 'Comment deleted.',

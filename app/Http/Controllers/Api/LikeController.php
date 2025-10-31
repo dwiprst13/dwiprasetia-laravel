@@ -17,12 +17,9 @@ class LikeController extends Controller
             'user_id' => $user->id,
         ]);
 
-        $likeCount = $post->likes()->count();
-        $post->forceFill(['like_count' => $likeCount])->saveQuietly();
-
         return response()->json([
             'liked' => true,
-            'likes_count' => $likeCount,
+            'likes_count' => $post->likes()->count(),
         ], 201);
     }
 
@@ -34,12 +31,9 @@ class LikeController extends Controller
             ->where('user_id', $user->id)
             ->delete();
 
-        $likeCount = $post->likes()->count();
-        $post->forceFill(['like_count' => $likeCount])->saveQuietly();
-
         return response()->json([
             'liked' => false,
-            'likes_count' => $likeCount,
+            'likes_count' => $post->likes()->count(),
         ]);
     }
 }
