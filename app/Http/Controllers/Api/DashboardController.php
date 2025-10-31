@@ -31,24 +31,19 @@ public function __invoke()
         ->get()
         ->loadCount(['likes', 'comments']);
 
-    // 👉 Range 7 hari
     $startDate = now()->subDays(6)->startOfDay();
 
-    // ✅ User registered per day
     $usersChart = User::selectRaw('DATE(created_at) as date, COUNT(*) as count')
         ->whereDate('created_at', '>=', $startDate)
         ->groupBy('date')
         ->orderBy('date')
         ->get();
-
-    // ✅ Posts created per day
     $postsChart = Post::selectRaw('DATE(created_at) as date, COUNT(*) as count')
         ->whereDate('created_at', '>=', $startDate)
         ->groupBy('date')
         ->orderBy('date')
         ->get();
 
-    // ✅ Comments created per day
     $commentsChart = Comment::selectRaw('DATE(created_at) as date, COUNT(*) as count')
         ->whereDate('created_at', '>=', $startDate)
         ->groupBy('date')
@@ -59,7 +54,6 @@ public function __invoke()
         'totals' => $totals,
         'recent_posts' => PostResource::collection($recentPosts),
 
-        // ✅ Data chart
         'chart' => [
             'users' => $usersChart,
             'posts' => $postsChart,
