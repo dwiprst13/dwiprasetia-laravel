@@ -8,6 +8,7 @@ use App\Http\Requests\Post\UpdatePostRequest;
 use App\Http\Resources\PostResource;
 use App\Models\Post;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -17,17 +18,16 @@ class PostController extends Controller
     public function index(Request $request)
     {
         $query = Post::query()
-            ->with('author')
-            ->withCount(['likes', 'comments']);
+            ->with(['author', 'category', 'tags']);
 
         $user = $request->user('sanctum') ?? $request->user();
         $status = $request->input('status');
 
         if ($user && $user->isAdmin()) {
             if ($status) {
-                if (! in_array($status, ['published', 'draft', 'all'], true)) {
+                if (! in_array($status, ['published', 'draft', 'scheduled', 'archived', 'all'], true)) {
                     throw ValidationException::withMessages([
-                        'status' => 'Status filter must be all, published, or draft.',
+                        'status' => 'Status filter must be all, published, draft, scheduled, or archived.',
                     ]);
                 }
 
@@ -50,9 +50,25 @@ class PostController extends Controller
             $query->where('user_id', $authorId);
         }
 
+        if ($categoryId = $request->integer('category_id')) {
+            $query->where('category_id', $categoryId);
+        }
+
+        if ($tagIds = $request->input('tags')) {
+            $tagIds = array_filter((array) $tagIds, fn ($tagId) => is_numeric($tagId));
+            if ($tagIds) {
+                $query->whereHas('tags', function ($builder) use ($tagIds) {
+                    $builder->whereIn('tags.id', $tagIds);
+                });
+            }
+        }
+
         $perPage = (int) min($request->integer('per_page', 10) ?: 10, 100);
 
-        $posts = $query->orderByDesc('created_at')->paginate($perPage)->withQueryString();
+        $posts = $query->orderByDesc('published_at')
+            ->orderByDesc('created_at')
+            ->paginate($perPage)
+            ->withQueryString();
 
         return PostResource::collection($posts);
     }
@@ -67,10 +83,31 @@ class PostController extends Controller
             $data['featured_image'] = $request->file('featured_image')->store('posts', 'public');
         }
 
+        if ($request->hasFile('thumbnail')) {
+            $data['thumbnail'] = $request->file('thumbnail')->store('posts', 'public');
+        }
+
+        if ($request->hasFile('og_image')) {
+            $data['og_image'] = $request->file('og_image')->store('posts', 'public');
+        }
+
+        $tags = $data['tags'] ?? [];
+        unset($data['tags']);
+
+        $data['status'] = $data['status'] ?? 'draft';
+        $data['allow_comments'] = $data['allow_comments'] ?? true;
+        $data['reading_time'] = $data['reading_time'] ?? $this->estimateReadingTime($data['content'] ?? '');
+        $this->applyStatusTimestamps($data);
+
         $data['user_id'] = $request->user()->id;
 
         $post = Post::create($data);
-        $post->load('author')->loadCount(['likes', 'comments']);
+
+        if ($tags) {
+            $post->tags()->sync($tags);
+        }
+
+        $post->load(['author', 'category', 'tags']);
 
         return PostResource::make($post)->response()->setStatusCode(201);
     }
@@ -83,7 +120,12 @@ class PostController extends Controller
             abort(404);
         }
 
-        $post->load('author')->loadCount(['likes', 'comments']);
+        if ($post->status === 'published') {
+            $post->incrementViewCounter();
+            $post->refresh();
+        }
+
+        $post->load(['author', 'category', 'tags']);
 
         return PostResource::make($post);
     }
@@ -98,28 +140,67 @@ class PostController extends Controller
 
         if ($request->hasFile('featured_image')) {
             $newPath = $request->file('featured_image')->store('posts', 'public');
-
             if ($post->featured_image) {
                 Storage::disk('public')->delete($post->featured_image);
             }
-
             $data['featured_image'] = $newPath;
+        } elseif (array_key_exists('featured_image', $data) && $data['featured_image'] === null && $post->featured_image) {
+            Storage::disk('public')->delete($post->featured_image);
+            $data['featured_image'] = null;
+        }
+
+        if ($request->hasFile('thumbnail')) {
+            $newThumbnail = $request->file('thumbnail')->store('posts', 'public');
+            if ($post->thumbnail) {
+                Storage::disk('public')->delete($post->thumbnail);
+            }
+            $data['thumbnail'] = $newThumbnail;
+        } elseif (array_key_exists('thumbnail', $data) && $data['thumbnail'] === null) {
+            if ($post->thumbnail) {
+                Storage::disk('public')->delete($post->thumbnail);
+            }
+            $data['thumbnail'] = null;
+        }
+
+        if ($request->hasFile('og_image')) {
+            $newOgImage = $request->file('og_image')->store('posts', 'public');
+            if ($post->og_image) {
+                Storage::disk('public')->delete($post->og_image);
+            }
+            $data['og_image'] = $newOgImage;
+        } elseif (array_key_exists('og_image', $data) && $data['og_image'] === null) {
+            if ($post->og_image) {
+                Storage::disk('public')->delete($post->og_image);
+            }
+            $data['og_image'] = null;
+        }
+
+        if (array_key_exists('content', $data) && empty($data['reading_time'])) {
+            $data['reading_time'] = $this->estimateReadingTime($data['content']);
+        }
+
+        $this->applyStatusTimestamps($data, $post);
+
+        $tags = null;
+        if (array_key_exists('tags', $data)) {
+            $tags = $data['tags'] ?? [];
+            unset($data['tags']);
         }
 
         $post->fill($data);
         $post->save();
 
-        $post->load('author')->loadCount(['likes', 'comments']);
+        if ($tags !== null) {
+            $post->tags()->sync($tags);
+        }
+
+        $post->load(['author', 'category', 'tags']);
 
         return PostResource::make($post);
     }
 
     public function destroy(Post $post)
     {
-        if ($post->featured_image) {
-            Storage::disk('public')->delete($post->featured_image);
-        }
-
         $post->delete();
 
         return response()->json([
@@ -146,5 +227,37 @@ class PostController extends Controller
         return Post::where('slug', $slug)
             ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
             ->exists();
+    }
+
+    protected function estimateReadingTime(string $content): int
+    {
+        $wordCount = str_word_count(strip_tags($content));
+
+        return max(1, (int) ceil($wordCount / 200));
+    }
+
+    protected function applyStatusTimestamps(array &$data, ?Post $post = null): void
+    {
+        $status = $data['status'] ?? $post?->status ?? 'draft';
+        $now = Carbon::now();
+
+        if ($status === 'published') {
+            $data['published_at'] = $data['published_at'] ?? $post?->published_at ?? $now;
+            $data['scheduled_at'] = null;
+        } elseif ($status === 'scheduled') {
+            $data['scheduled_at'] = $data['scheduled_at'] ?? $post?->scheduled_at;
+            $data['published_at'] = null;
+        } else {
+            if (! array_key_exists('published_at', $data)) {
+                $data['published_at'] = ($status === 'archived') ? ($data['published_at'] ?? $post?->published_at) : null;
+            }
+            $data['scheduled_at'] = null;
+        }
+
+        if ($status === 'scheduled' && empty($data['scheduled_at'])) {
+            throw ValidationException::withMessages([
+                'scheduled_at' => 'Scheduled posts must include a schedule datetime.',
+            ]);
+        }
     }
 }
