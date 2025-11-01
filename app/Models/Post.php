@@ -17,8 +17,16 @@ class Post extends Model
         'title',
         'slug',
         'content',
+        'excerpt',
         'featured_image',
+        'featured_image_alt',
+        'category_slug',
+        'tags',
         'status',
+    ];
+
+    protected $casts = [
+        'tags' => 'array',
     ];
 
     public function author(): BelongsTo
@@ -44,5 +52,10 @@ class Post extends Model
     public function scopePublished($query)
     {
         return $query->where('status', 'published');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'category_slug', 'slug');
     }
 }

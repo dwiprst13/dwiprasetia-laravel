@@ -17,7 +17,7 @@ class PostController extends Controller
     public function index(Request $request)
     {
         $query = Post::query()
-            ->with('author')
+            ->with(['author', 'category'])
             ->withCount(['likes', 'comments']);
 
         $user = $request->user('sanctum') ?? $request->user();
@@ -50,6 +50,21 @@ class PostController extends Controller
             $query->where('user_id', $authorId);
         }
 
+        if ($categorySlug = $request->input('category_slug') ?? $request->input('category')) {
+            $query->where('category_slug', $categorySlug);
+        }
+
+        $tagFilter = $request->input('tag') ?? $request->input('tags');
+        if ($tagFilter) {
+            $tagsToFilter = is_array($tagFilter)
+                ? $tagFilter
+                : array_filter(array_map('trim', explode(',', (string) $tagFilter)));
+
+            foreach ($tagsToFilter as $tagSlug) {
+                $query->whereJsonContains('tags', $tagSlug);
+            }
+        }
+
         $perPage = (int) min($request->integer('per_page', 10) ?: 10, 100);
 
         $posts = $query->orderByDesc('created_at')->paginate($perPage)->withQueryString();
@@ -61,6 +76,9 @@ class PostController extends Controller
     {
         $data = $request->validated();
 
+        $data['category_slug'] = $this->normalizeCategorySlug($data['category_slug'] ?? null);
+        $data['tags'] = $this->normalizeTags($data['tags'] ?? null);
+
         $data['slug'] = $data['slug'] ?? $this->makeUniqueSlug($data['title']);
 
         if ($request->hasFile('featured_image')) {
@@ -70,7 +88,7 @@ class PostController extends Controller
         $data['user_id'] = $request->user()->id;
 
         $post = Post::create($data);
-        $post->load('author')->loadCount(['likes', 'comments']);
+        $post->load(['author', 'category'])->loadCount(['likes', 'comments']);
 
         return PostResource::make($post)->response()->setStatusCode(201);
     }
@@ -83,7 +101,7 @@ class PostController extends Controller
             abort(404);
         }
 
-        $post->load('author')->loadCount(['likes', 'comments']);
+        $post->load(['author', 'category'])->loadCount(['likes', 'comments']);
 
         return PostResource::make($post);
     }
@@ -94,6 +112,14 @@ class PostController extends Controller
 
         if (array_key_exists('slug', $data)) {
             $data['slug'] = $data['slug'] ?: $this->makeUniqueSlug($data['title'] ?? $post->title, $post->id);
+        }
+
+        if (array_key_exists('category_slug', $data)) {
+            $data['category_slug'] = $this->normalizeCategorySlug($data['category_slug'] ?? null);
+        }
+
+        if (array_key_exists('tags', $data)) {
+            $data['tags'] = $this->normalizeTags($data['tags']);
         }
 
         if ($request->hasFile('featured_image')) {
@@ -109,7 +135,7 @@ class PostController extends Controller
         $post->fill($data);
         $post->save();
 
-        $post->load('author')->loadCount(['likes', 'comments']);
+        $post->load(['author', 'category'])->loadCount(['likes', 'comments']);
 
         return PostResource::make($post);
     }
@@ -146,5 +172,30 @@ class PostController extends Controller
         return Post::where('slug', $slug)
             ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
             ->exists();
+    }
+
+    protected function normalizeCategorySlug(?string $slug): ?string
+    {
+        $slug = is_string($slug) ? trim($slug) : null;
+
+        return $slug !== '' ? $slug : null;
+    }
+
+    /**
+     * @param  array<int, string>|null  $tags
+     * @return array<int, string>
+     */
+    protected function normalizeTags(?array $tags): array
+    {
+        if (! $tags) {
+            return [];
+        }
+
+        return collect($tags)
+            ->filter(fn ($tag) => is_string($tag) && $tag !== '')
+            ->map(fn ($tag) => trim($tag))
+            ->unique()
+            ->values()
+            ->all();
     }
 }

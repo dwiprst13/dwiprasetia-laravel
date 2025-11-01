@@ -28,6 +28,11 @@ class StorePostRequest extends FormRequest
             'content' => ['required', 'string'],
             'status' => ['required', Rule::in(['published', 'draft'])],
             'featured_image' => ['nullable', 'image', 'max:4096'],
+            'excerpt' => ['nullable', 'string', 'max:500'],
+            'featured_image_alt' => ['nullable', 'string', 'max:150'],
+            'category_slug' => ['nullable', 'string', 'max:100', Rule::exists('category', 'slug')],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'distinct', 'max:100', Rule::exists('tags', 'slug')],
         ];
     }
 }

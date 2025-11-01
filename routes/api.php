@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CommentController;
 use App\Http\Controllers\Api\CommentReportController;
 use App\Http\Controllers\Api\DashboardController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SavedPostController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\UserManagementController;
 use Illuminate\Support\Facades\Route;
@@ -93,5 +95,17 @@ Route::prefix('v1')->group(function () {
         Route::get('admin/media/{media}', [MediaController::class, 'show']);
         Route::match(['put', 'patch'], 'admin/media/{media}', [MediaController::class, 'update']);
         Route::delete('admin/media/{media}', [MediaController::class, 'destroy']);
+
+        Route::get('admin/categories', [CategoryController::class, 'index']);
+        Route::post('admin/categories', [CategoryController::class, 'store']);
+        Route::get('admin/categories/{category}', [CategoryController::class, 'show']);
+        Route::match(['put', 'patch'], 'admin/categories/{category}', [CategoryController::class, 'update']);
+        Route::delete('admin/categories/{category}', [CategoryController::class, 'destroy']);
+
+        Route::get('admin/tags', [TagController::class, 'index']);
+        Route::post('admin/tags', [TagController::class, 'store']);
+        Route::get('admin/tags/{tag}', [TagController::class, 'show']);
+        Route::match(['put', 'patch'], 'admin/tags/{tag}', [TagController::class, 'update']);
+        Route::delete('admin/tags/{tag}', [TagController::class, 'destroy']);
     });
 });
